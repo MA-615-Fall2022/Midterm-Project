@@ -1,0 +1,236 @@
+---
+title: "Midterm EDA project"
+author: "JingjianGao"
+date: "2022-11-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Read the Data and get rid of NA Values
+```{r}
+library(tidyverse)
+library(magrittr)
+library(readxl)
+
+strawb <- read_xlsx("/Users/billg/Desktop/MA 615 F22/Midterm-Project/strawberries-2022oct30-a.xlsx",col_names = TRUE)
+
+cnames <- colnames(strawb)
+x <- 1:dim(strawb)[2]
+
+# Getting information from each column
+unique(strawb[1])
+unique(strawb[2])
+unique(strawb[3])
+unique(strawb[6])
+unique(strawb[19])
+
+#Drop NAs
+T <- NULL
+for(i in x){T <- c(T, dim(unique(strawb[i]))[1])}
+drop_cols <- cnames[which(T == 1)]
+strawb %<>% select(!all_of(drop_cols))
+strawb %<>% arrange(Year, State)
+# Now we have a much cleaner dataset with only 10 variables
+
+
+```
+
+## Further Improvements
+```{r}
+colnames(strawb)
+temp1 <- strawb %>% select(`Data Item`) %>% 
+         distinct()
+
+# Seperate the Data Item column into four in order to extract information
+strawb <- strawb %>% separate(col=`Data Item`,
+            into = c("Strawberries", "type", "items", "units"),
+                               sep = ",",
+                               fill = "right")
+
+pr_rec <- grep("STRAWBERRIES - PRICE RECEIVED", 
+                  strawb$Strawberries, 
+                  ignore.case = T)
+
+type_organic <- grep("organic", 
+               strawb$type, 
+               ignore.case = T)
+items_organic <- grep("organic", 
+                      strawb$items, 
+                      ignore.case = T)
+
+Domain_organic <- grep("organic", 
+                      strawb$Domain, 
+                      ignore.case = T)
+
+Domain_Category_organic <- grep("organic", 
+                       strawb$`Domain Category`, 
+                       ignore.case = T)
+
+same <- (intersect(type_organic, Domain_organic)==intersect(type_organic, Domain_organic))
+length(same)==length(type_organic)
+
+org_rows <- intersect(type_organic, Domain_organic)
+
+strawb_organic <- strawb %>% slice(org_rows, preserve = FALSE)
+
+strawb_non_organic <- strawb %>% filter(!row_number() %in% org_rows)
+
+#Now we have two different datasets, one for Organic, one for Non-Organic.
+
+```
+
+## Getting Chemical Information from the Non Organic Section
+```{r}
+chem_rows <- grep("BEARING - APPLICATIONS", 
+                       strawb_non_organic$type, 
+                       ignore.case = T)
+chem_rows_1 <- grep("chemical", 
+                  strawb_non_organic$Domain, 
+                  ignore.case = T)
+chem_rows_2 <- grep("chemical", 
+                    strawb_non_organic$`Domain Category`, 
+                    ignore.case = T)
+
+intersect(chem_rows,chem_rows_1)
+intersect(chem_rows,chem_rows_2)
+# Now we know that the chemical rows/information we get from type, Domain, and Domain Category are 
+# the same so we can just look at the data from chem_rows.
+
+strawb_chem <- strawb_non_organic %>% slice(chem_rows, preserve = FALSE)
+
+# Now we have three subsets of the original data: Organic, Non-Organic and Chemical
+
+```
+
+## Getting rid of all no info columns
+
+```{r}
+# Straw_Chem
+before_cols = colnames(strawb_chem)
+  T = NULL
+  x = length(before_cols)
+
+   for(i in 1:x){
+    b <- length(unlist(strawb_chem[,i] %>% unique()) )
+    T <- c(T,b)
+   }
+    
+  no_info_cols <- before_cols[which(T == 1)]
+  strawb_chem %<>% select(!all_of(no_info_cols))
+  after_cols = colnames(strawb_chem)
+#Straw_Organic
+before_cols2 = colnames(strawb_organic)
+  T = NULL
+  x = length(before_cols2)
+
+   for(i in 1:x){
+    b <- length(unlist(strawb_organic[,i] %>% unique()) )
+    T <- c(T,b)
+   }
+    
+  no_info_cols2 <- before_cols2[which(T == 1)]
+  strawb_organic %<>% select(!all_of(no_info_cols2))
+  after_cols2 = colnames(strawb_organic)
+#Straw_non_organic
+before_cols3 = colnames(strawb_non_organic)
+  T = NULL
+  x = length(before_cols3)
+
+   for(i in 1:x){
+    b <- length(unlist(strawb_non_organic[,i] %>% unique()) )
+    T <- c(T,b)
+   }
+    
+  no_info_cols3 <- before_cols3[which(T == 1)]
+  strawb_non_organic %<>% select(!all_of(no_info_cols3))
+  after_cols3 = colnames(strawb_non_organic)
+
+```
+
+## Further Improvements to get # of different chemicals
+```{r}
+strawb_chem %<>% separate(col=`Domain Category`, 
+                                    into = c("dc1", "chem_name"),
+                                    sep = ":", 
+                                    fill = "right")
+
+strawb_chem %<>% select(Year, State, items, units, dc1, chem_name, Value)
+strawb_chem %<>% rename(category = units)
+strawb_chem$items <- str_remove_all(strawb_chem$items, "MEASURED IN ")
+strawb_chem %<>% rename(units = items)
+
+bb  <- grep("CHEMICAL, ", 
+            strawb_chem$dc1, 
+            ignore.case = T)
+length(bb)
+#2067
+strawb_chem$dc1 <- str_remove_all(strawb_chem$dc1, "CHEMICAL, ")
+
+strawb_chem$dc1 %>% unique()
+
+strawb_chem %<>% rename(chem_types = dc1)
+
+temp1 <- strawb_chem%>% select(`chem_types`) %>% 
+         distinct()
+
+bb  <- grep("BIFENTHRIN", 
+            strawb_chem$chem_name, 
+            ignore.case = T)
+
+bifen <- strawb_chem %>% slice(bb)
+strawb_chem$chem_name <- str_remove_all(strawb_chem$chem_name, "\\(")
+strawb_chem %<>% separate(col = chem_name,
+                          into = c("chem_name","chem_code"),
+                          sep = "=",
+                          fill = "right"
+                            ) 
+
+temp1 <- strawb_chem %>% select('chem_name') %>%
+  distinct()
+# 172 different chemicals
+
+```
+
+## EDA
+
+```{r}
+# Now we can do our EDA based on the subsets of the data
+
+
+
+#By comparing the tables between Organic and Non-Organic strawberries, we can see
+#that organic strawberries have a greater sales value. 
+#Certain Chemicals are super harmful to human bodies so choose Organic Strawberries and those
+#with safe chemicals.
+
+#The original dataset contains way too much information. So we can improve the data by 
+#subsetting it into three different tibbles. Each containing different information.
+# Organic, Non-Organic, and chemicals used.
+# We may need information on which chemical is harmful and which is not harmful to human
+# bodies in order to further clean the data. I would hope to get a conclusion about which farm
+# or which state has the healthiest strawberries to eat.
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
